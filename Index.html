@@ -197,17 +197,40 @@ async function populateDivisions(){
 }
 
 // --- Build Rider Numbers ---
-async function buildRiderNumberList(){
-  const res = await fetch(`${API_BASE}?action=getRiderNumberMap`);
-  const existingMap = await res.json();
-  const datalist = document.getElementById("riderNumbers");
-  datalist.innerHTML = "";
-  Object.keys(existingMap).map(Number).sort((a,b)=>a-b).forEach(n=>{
-    const option = document.createElement("option");
-    option.value = n; option.label = existingMap[n];
-    datalist.appendChild(option);
-  });
-}
+        async function buildRiderNumberList() {
+            try {
+                const res = await fetch(`${API_BASE}?action=getRiderNumberMap`);
+                const existingMap = await res.json();  // { "203": "Alice Smith", ... }
+
+                const datalist = document.getElementById("riderNumbers");
+                datalist.innerHTML = "";
+
+                // Add numbers 1-200 first
+                for (let i = 1; i <= 200; i++) {
+                    const option = document.createElement("option");
+                    option.value = i;
+                    if (existingMap[i]) option.label = existingMap[i]; // show name if exists
+                    datalist.appendChild(option);
+                }
+
+                // Then add numbers >200 from the sheet
+                Object.keys(existingMap)
+                    .map(Number)
+                    .filter(n => n > 200)
+                    .sort((a, b) => a - b)
+                    .forEach(n => {
+                        const option = document.createElement("option");
+                        option.value = n;
+                        option.label = existingMap[n];
+                        datalist.appendChild(option);
+                    });
+
+            } catch (err) {
+                console.error("Error loading rider numbers:", err);
+            }
+        }
+
+
 
 // --- Load Rider Info ---
 async function loadRider(){
