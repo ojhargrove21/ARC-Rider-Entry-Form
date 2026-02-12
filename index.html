@@ -18,8 +18,7 @@
       font-size: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
     }
     input[readonly] { background-color: #eee; }
-    button { font-size: 16px; cursor: pointer; background-color: #0078D7; color: white; border: none; }
-    button:hover { background-color: #005ea3; }
+    
     .section-divider { border-top: 1px solid #ccc; margin: 30px 0; }
 
     /* Dropdown desktop */
@@ -52,7 +51,7 @@
   <title>Entry Form</title>
 </head>
 <body>
-<h1>Entry Form</h1>
+<h1 role="main">Entry Form</h1>
 
 <label for="number">Rider Number:</label>
 <input id="number" list="riderNumbers" placeholder="Select or type Rider Number" onchange="loadRider()">
@@ -288,3 +287,4 @@
 </script>
 </body>
 </html>
+
