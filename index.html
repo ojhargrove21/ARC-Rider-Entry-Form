@@ -157,8 +157,8 @@
         <div class="dropdown-content" id="classDropdownContent"></div>
     </div>
 
-    <div class="modal" id="classModal" onclick="closeModal()" style="z-index: 1;">
-        <div class="modal-content" style="z-index: 10;">
+    <div class="modal" id="classModal" >
+        <div class="modal-content" >
             <div class="modal-header">Select Classes</div>
             <div id="modalCheckboxes" ></div>
             <button type="button" onclick="closeModal()">Done</button>
@@ -359,9 +359,53 @@
 
             alert("Form submitted!");
         }
+        // ----- CLOSE MODAL ONLY WHEN CLICKING THE BACKDROP -----
+const classModal = document.getElementById("classModal");
+const classModalContent = document.getElementById("classModalContent");
+
+classModal.addEventListener("click", (e) => {
+  // If the click was on the dark overlay (not inside the content), close
+  if (e.target === classModal) {
+    closeModal();
+  }
+});
+
+// Prevent clicks inside modal content from bubbling to overlay
+classModalContent.addEventListener("click", (e) => {
+  e.stopPropagation();
+});
+
+
+// ----- CLOSE DESKTOP DROPDOWN WHEN CLICKING OUTSIDE -----
+const dropdownContainer = document.getElementById("dropdownContainer");
+const dropdownContent = document.getElementById("classDropdownContent");
+
+document.addEventListener("click", (e) => {
+  // Desktop only
+  if (window.innerWidth <= 600) return;
+
+  // If click is outside the dropdown container, close it
+  if (!dropdownContainer.contains(e.target)) {
+    dropdownContent.style.display = "none";
+  }
+});
+
+
+// ----- ESC KEY CLOSES MODAL & DROPDOWN -----
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    // close modal
+    if (classModal.style.display === "flex") closeModal();
+
+    // close dropdown (desktop)
+    dropdownContent.style.display = "none";
+  }
+});
+
     </script>
 </body>
 </html>
+
 
 
 
