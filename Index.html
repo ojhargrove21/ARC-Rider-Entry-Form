@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5,user-scalable=yes">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            background: #f9f9f9;
+        }
+
+        body {
+            padding: 20px;
+            margin: auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        label, .section_label {
+            font-weight: bold;
+            display: block;
+            margin-top: 15px;
+        }
+
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+            input[readonly] {
+                background-color: #eee;
+            }
+
+        button {
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #0078D7;
+            color: white;
+            border: none;
+        }
+
+            button:hover {
+                background-color: #005ea3;
+            }
+
+        .section-divider {
+            border-top: 1px solid #ccc;
+            margin: 30px 0;
+        }
+
+        /* Dropdown desktop */
+        .dropdown {
+            position: relative;
+            width: 100%;
+        }
+
+            .dropdown button {
+                width: 100%;
+                text-align: left;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                padding: 10px;
+            }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            z-index: 10;
+            box-sizing: border-box;
+        }
+
+            .dropdown-content label {
+                display: block;
+                padding: 5px 10px;
+                cursor: pointer;
+            }
+
+                .dropdown-content label:hover {
+                    background-color: #f0f0f0;
+                }
+
+        /* Modal for mobile */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            width: 90%;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border-radius: 8px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .modal-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .modal label {
+            display: block;
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .modal button {
+            margin-top: 10px;
+        }
+    </style>
+    <title>Entry Form</title>
+</head>
+<body>
+    <h1>Entry Form</h1>
+
+    <label for="number">Rider Number:</label>
+    <input id="number" list="riderNumbers" placeholder="Select or type Rider Number" onchange="loadRider()">
+    <datalist id="riderNumbers"></datalist>
+
+    <label for="firstName">First Name:</label>
+    <input id="firstName" readonly>
+
+    <label for="lastName">Last Name:</label>
+    <input id="lastName" readonly>
+
+    <label for="age">Age:</label>
+    <input id="age" type="number">
+
+    <label for="division">Division</label>
+    <select id="division" onchange="loadCheckboxes()">
+        <option value="">-- Select Division --</option>
+    </select>
+
+    <label for="horse">Horse Name:</label>
+    <input id="horse" readonly>
+
+    <div class="section-divider"></div>
+
+    <!-- Classes selection -->
+    <div class="section_label">Select Classes:</div>
+    <div class="dropdown" id="dropdownContainer">
+        <button type="button" id="classDropdownBtn">Select Classes</button>
+        <div class="dropdown-content" id="classDropdownContent"></div>
+    </div>
+
+    <!-- Mobile modal -->
+    <div class="modal" id="classModal">
+        <div class="modal-content">
+            <div class="modal-header">Select Classes</div>
+            <div id="modalCheckboxes"></div>
+            <button onclick="closeModal()">Done</button>
+        </div>
+    </div>
+
+    <button onclick="submitForm()">Submit</button>
+
+    <script>
+        const API_BASE = "https://script.google.com/macros/s/AKfycbzym7n7_5yscjriGoqKoGLWlNKSAVVS4ifsbOMKb5zhClWBnU6pyWZr9J8DDgoUIqcXDQ/exec"; // <-- Replace with your GAS web app URL
+
+// --- Populate Divisions ---
+async function populateDivisions(){
+  const res = await fetch(`${API_BASE}?action=getDivisions`);
+  const divisions = await res.json();
+  const select = document.getElementById("division");
+  divisions.forEach(d=>{
+    const option = document.createElement("option");
+    option.value = d; option.textContent = d;
+    select.appendChild(option);
+  });
+}
+
+// --- Build Rider Numbers ---
+async function buildRiderNumberList(){
+  const res = await fetch(`${API_BASE}?action=getRiderNumberMap`);
+  const existingMap = await res.json();
+  const datalist = document.getElementById("riderNumbers");
+  datalist.innerHTML = "";
+  Object.keys(existingMap).map(Number).sort((a,b)=>a-b).forEach(n=>{
+    const option = document.createElement("option");
+    option.value = n; option.label = existingMap[n];
+    datalist.appendChild(option);
+  });
+}
+
+// --- Load Rider Info ---
+async function loadRider(){
+  const number = document.getElementById("number").value;
+  if(!number) return;
+  const res = await fetch(`${API_BASE}?action=findRider&number=${number}`);
+  const rider = await res.json();
+  if(rider.exists){
+    firstName.value = rider.firstName;
+    lastName.value = rider.lastName;
+    age.value = rider.age;
+    horse.value = rider.horse;
+    setFieldState(true);
+  } else {
+    firstName.value=""; lastName.value=""; age.value=""; horse.value="";
+    setFieldState(false);
+  }
+}
+
+// --- Load Classes ---
+async function loadCheckboxes(){
+  const division = document.getElementById("division").value;
+  if(!division) return;
+  const res = await fetch(`${API_BASE}?action=getClasses&division=${division}`);
+  const items = await res.json();
+  renderClasses(items);
+}
+
+// --- Render Classes ---
+function renderClasses(items){
+  const desktopContainer = document.getElementById("classDropdownContent");
+  const modalContainer = document.getElementById("modalCheckboxes");
+  desktopContainer.innerHTML = "";
+  modalContainer.innerHTML = "";
+
+  items.forEach((item,i)=>{
+    // Desktop
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = item; cb.id = "class_" + i;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + item));
+    desktopContainer.appendChild(label);
+
+    // Mobile modal
+    const mlabel = document.createElement("label");
+    const mcb = document.createElement("input");
+    mcb.type = "checkbox"; mcb.value = item; mcb.id = "modal_" + i;
+    mlabel.appendChild(mcb);
+    mlabel.appendChild(document.createTextNode(" " + item));
+    modalContainer.appendChild(mlabel);
+  });
+}
+
+// --- Dropdown / Modal Toggle ---
+document.getElementById("classDropdownBtn").addEventListener("click", ()=>{
+  if(window.innerWidth > 600){
+    const container = document.getElementById("classDropdownContent");
+    container.style.display = container.style.display === "block" ? "none" : "block";
+  } else {
+    document.getElementById("classModal").style.display = "flex";
+    syncModalCheckboxes();
+  }
+});
+
+function closeModal(){
+  document.getElementById("classModal").style.display = "none";
+  syncDesktopCheckboxes();
+}
+
+// --- Sync Checkboxes ---
+function syncDesktopCheckboxes(){
+  const modalChecks = document.querySelectorAll("#modalCheckboxes input");
+  const desktopChecks = document.querySelectorAll("#classDropdownContent input");
+  modalChecks.forEach((mcb,i)=>{
+    desktopChecks[i].checked = mcb.checked;
+  });
+}
+
+function syncModalCheckboxes(){
+  const modalChecks = document.querySelectorAll("#modalCheckboxes input");
+  const desktopChecks = document.querySelectorAll("#classDropdownContent input");
+  modalChecks.forEach((mcb,i)=>{
+    mcb.checked = desktopChecks[i].checked;
+  });
+}
+
+// --- Field ReadOnly ---
+function setFieldState(readOnly){
+  ["firstName","lastName","horse"].forEach(id=>document.getElementById(id).readOnly=readOnly);
+}
+
+// --- Submit Form ---
+async function submitForm(){
+  const selected = [...document.querySelectorAll("#classDropdownContent input:checked")].map(cb=>cb.value);
+  const data = {
+    action: "submitForm",
+    number: number.value,
+    firstName: firstName.value,
+    lastName: lastName.value,
+    age: +age.value,
+    division: division.value,
+    horse: horse.value,
+    classes: selected
+  };
+  if(!data.number || data.classes.length===0){ alert("Rider Number and at least one class are required."); return; }
+
+  await fetch(API_BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  alert("Form submitted!");
+}
+
+// --- Init Page ---
+document.addEventListener("DOMContentLoaded", async () => {
+  await populateDivisions();
+  await buildRiderNumberList();
+});
+    </script>
+</body>
+</html>
