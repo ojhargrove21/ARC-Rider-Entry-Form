@@ -39,14 +39,6 @@
       margin: 30px 0;
     }
 
-    /* Plain-text loading indicator */
-    #loadingText {
-      display: none;
-      margin: 10px 0 0;
-      font-size: 14px;
-      font-weight: bold;
-    }
-
     /* Dropdown desktop */
     .dropdown { position: relative; width: 100%; }
 
@@ -119,9 +111,6 @@
 <body>
   <h1 role="main">Entry Form</h1>
 
-  <!-- Plain text loading indicator -->
-  <div id="loadingText" role="status" aria-live="polite">Loading...</div>
-
   <label for="number">Rider Number:</label>
   <input id="number" list="riderNumbers" placeholder="Select or type Rider Number" onchange="loadRider()">
   <datalist id="riderNumbers"></datalist>
@@ -166,28 +155,53 @@
     const API_BASE = "https://script.google.com/macros/s/AKfycbyoNwykcNDis55g2Qzyg0xlcyVy6xinGrxOKNV_YCMnRTFcD3iYUXU_07saZhOKeFgPtw/exec";
 
     /*****************************************************************
-     * LOADING INDICATOR (plain text)
+     * INLINE LOADING PLACEHOLDERS (per area being loaded)
      *****************************************************************/
-    const loadingEl = document.getElementById("loadingText");
-    let loadingCount = 0;
-
-    function showLoading(text = "Loading...") {
-      loadingCount++;
-      loadingEl.textContent = text;
-      loadingEl.style.display = "block";
+    function setLoadingButton(btnEl, isLoading, loadingText = "Loading...", normalText = "Select Classes") {
+      if (!btnEl) return;
+      if (isLoading) {
+        btnEl.dataset.normalText = btnEl.textContent || normalText;
+        btnEl.textContent = loadingText;
+        btnEl.disabled = true;
+        btnEl.setAttribute("aria-busy", "true");
+      } else {
+        btnEl.textContent = btnEl.dataset.normalText || normalText;
+        btnEl.disabled = false;
+        btnEl.removeAttribute("aria-busy");
+      }
     }
 
-    function hideLoading() {
-      loadingCount = Math.max(0, loadingCount - 1);
-      if (loadingCount === 0) loadingEl.style.display = "none";
+    function setLoadingSelect(selectEl, isLoading, loadingText = "Loading...", normalText = "-- Select Division --") {
+      if (!selectEl) return;
+      if (!selectEl.options.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = normalText;
+        selectEl.appendChild(opt);
+      }
+      if (isLoading) {
+        selectEl.dataset.normalText = selectEl.options[0].textContent || normalText;
+        selectEl.options[0].textContent = loadingText;
+        selectEl.disabled = true;
+        selectEl.setAttribute("aria-busy", "true");
+      } else {
+        selectEl.options[0].textContent = selectEl.dataset.normalText || normalText;
+        selectEl.disabled = false;
+        selectEl.removeAttribute("aria-busy");
+      }
     }
 
-    async function withLoading(promiseFactory, text) {
-      showLoading(text);
-      try {
-        return await promiseFactory();
-      } finally {
-        hideLoading();
+    function setLoadingInputPlaceholder(inputEl, isLoading, loadingText = "Loading...") {
+      if (!inputEl) return;
+      if (isLoading) {
+        inputEl.dataset.normalPlaceholder = inputEl.placeholder || "";
+        inputEl.placeholder = loadingText;
+        inputEl.disabled = true;
+        inputEl.setAttribute("aria-busy", "true");
+      } else {
+        inputEl.placeholder = inputEl.dataset.normalPlaceholder || inputEl.placeholder || "";
+        inputEl.disabled = false;
+        inputEl.removeAttribute("aria-busy");
       }
     }
 
@@ -232,12 +246,9 @@
         if (v !== undefined && v !== null) url.searchParams.set(k, v);
       });
 
-      // show loading for actual network GETs
-      return await withLoading(async () => {
-        const res = await fetch(url.toString(), { method: "GET", redirect: "follow" });
-        if (!res.ok) throw new Error("GET failed: " + res.status);
-        return await res.json();
-      }, "Loading...");
+      const res = await fetch(url.toString(), { method: "GET", redirect: "follow" });
+      if (!res.ok) throw new Error("GET failed: " + res.status);
+      return await res.json();
     }
 
     async function rawApiPost(action, payloadObj) {
@@ -245,11 +256,9 @@
       body.set("action", action);
       body.set("payload", JSON.stringify(payloadObj || {}));
 
-      return await withLoading(async () => {
-        const res = await fetch(API_BASE, { method: "POST", body, redirect: "follow" });
-        const out = await res.json().catch(() => ({}));
-        return { res, out };
-      }, "Submitting...");
+      const res = await fetch(API_BASE, { method: "POST", body, redirect: "follow" });
+      const out = await res.json().catch(() => ({}));
+      return { res, out };
     }
 
     async function getServerVersions() {
@@ -315,36 +324,39 @@
       if (_versionsPromise) return _versionsPromise;
 
       _versionsPromise = (async () => {
-        // show loading for version refresh
-        showLoading("Checking for updates...");
-        try {
-          const serverV = await getServerVersions();
-          const localV = loadLocalVersions();
+        const serverV = await rawApiGet("getVersions"); // do not recurse into apiGet
+        const normalizedServerV = {
+          riders: String(serverV.riders || "0"),
+          divisions: String(serverV.divisions || "0"),
+          classes: String(serverV.classes || "0"),
+          altClasses: String(serverV.altClasses || "0"),
+          events: String(serverV.events || "0"),
+          entries: String(serverV.entries || "0"),
+        };
 
-          if (!localV) {
-            saveLocalVersions(serverV);
-            return serverV;
-          }
+        const localV = loadLocalVersions();
 
-          const changed = [];
-          Object.keys(serverV).forEach(k => {
-            if (String(localV[k] || "0") !== String(serverV[k] || "0")) changed.push(k);
-          });
-
-          if (changed.length) {
-            const groups = ["riders", "divisions", "classes", "misc"];
-            groups.forEach(g => {
-              const deps = dependsOnVersions(g);
-              const hit = deps.some(dep => changed.includes(dep));
-              if (hit) clearGroupCache(g);
-            });
-            saveLocalVersions(serverV);
-          }
-
-          return serverV;
-        } finally {
-          hideLoading();
+        if (!localV) {
+          saveLocalVersions(normalizedServerV);
+          return normalizedServerV;
         }
+
+        const changed = [];
+        Object.keys(normalizedServerV).forEach(k => {
+          if (String(localV[k] || "0") !== String(normalizedServerV[k] || "0")) changed.push(k);
+        });
+
+        if (changed.length) {
+          const groups = ["riders", "divisions", "classes", "misc"];
+          groups.forEach(g => {
+            const deps = dependsOnVersions(g);
+            const hit = deps.some(dep => changed.includes(dep));
+            if (hit) clearGroupCache(g);
+          });
+          saveLocalVersions(normalizedServerV);
+        }
+
+        return normalizedServerV;
       })();
 
       return _versionsPromise;
@@ -380,12 +392,30 @@
       ["firstName", "lastName", "horse"].forEach(id => document.getElementById(id).readOnly = readOnly);
     }
 
+    function updateClassButtonText() {
+      const btn = document.getElementById("classDropdownBtn");
+      if (!btn || btn.disabled) return; // don't override "Loading..."
+      const selected = [...document.querySelectorAll("#classDropdownContent input:checked")].length;
+      btn.textContent = selected ? `Select Classes (${selected} selected)` : "Select Classes";
+    }
+
     // ---------- init ----------
     document.addEventListener("DOMContentLoaded", async () => {
-      await withLoading(async () => {
+      const divisionSelect = document.getElementById("division");
+      setLoadingSelect(divisionSelect, true, "Loading divisions...", "-- Select Division --");
+      try {
         await populateDivisions();
+      } finally {
+        setLoadingSelect(divisionSelect, false, "Loading divisions...", "-- Select Division --");
+      }
+
+      const numberInput = document.getElementById("number");
+      setLoadingInputPlaceholder(numberInput, true, "Loading rider list...");
+      try {
         await buildRiderNumberList();
-      }, "Loading form...");
+      } finally {
+        setLoadingInputPlaceholder(numberInput, false, "Loading rider list...");
+      }
     });
 
     // ---------- divisions ----------
@@ -430,23 +460,26 @@
       const number = document.getElementById("number").value;
       if (!number) return;
 
-      const rider = await withLoading(
-        () => apiGet("findRider", { number }),
-        "Loading rider..."
-      );
+      const numberInput = document.getElementById("number");
+      setLoadingInputPlaceholder(numberInput, true, "Loading rider...");
+      try {
+        const rider = await apiGet("findRider", { number });
 
-      if (rider.exists) {
-        firstName.value = rider.firstName || "";
-        lastName.value = rider.lastName || "";
-        age.value = rider.age || "";
-        horse.value = rider.horse || "";
-        setFieldState(true);
-      } else {
-        firstName.value = "";
-        lastName.value = "";
-        age.value = "";
-        horse.value = "";
-        setFieldState(false);
+        if (rider.exists) {
+          firstName.value = rider.firstName || "";
+          lastName.value = rider.lastName || "";
+          age.value = rider.age || "";
+          horse.value = rider.horse || "";
+          setFieldState(true);
+        } else {
+          firstName.value = "";
+          lastName.value = "";
+          age.value = "";
+          horse.value = "";
+          setFieldState(false);
+        }
+      } finally {
+        setLoadingInputPlaceholder(numberInput, false, "Loading rider...");
       }
     }
 
@@ -455,12 +488,22 @@
       const division = document.getElementById("division").value;
       if (!division) return;
 
-      const items = await withLoading(
-        () => apiGet("getClasses", { division }),
-        "Loading classes..."
-      );
+      const btn = document.getElementById("classDropdownBtn");
+      setLoadingButton(btn, true, "Loading...", "Select Classes");
 
-      renderClasses(items);
+      try {
+        const items = await apiGet("getClasses", { division });
+        renderClasses(items);
+
+        // Close dropdown while reloading
+        document.getElementById("classDropdownContent").style.display = "none";
+
+        updateClassButtonText();
+      } finally {
+        // restore normal text (or "(n selected)" via updateClassButtonText)
+        setLoadingButton(btn, false, "Loading...", "Select Classes");
+        updateClassButtonText();
+      }
     }
 
     function renderClasses(items) {
@@ -470,20 +513,27 @@
       modalContainer.innerHTML = "";
 
       items.forEach((item, i) => {
+        // Desktop
         const label = document.createElement("label");
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.value = item;
         cb.id = "class_" + i;
+        cb.addEventListener("change", updateClassButtonText);
         label.appendChild(cb);
         label.appendChild(document.createTextNode(" " + item));
         desktopContainer.appendChild(label);
 
+        // Mobile modal
         const mlabel = document.createElement("label");
         const mcb = document.createElement("input");
         mcb.type = "checkbox";
         mcb.value = item;
         mcb.id = "modal_" + i;
+        mcb.addEventListener("change", () => {
+          syncDesktopCheckboxes();
+          updateClassButtonText();
+        });
         mlabel.appendChild(mcb);
         mlabel.appendChild(document.createTextNode(" " + item));
         modalContainer.appendChild(mlabel);
@@ -492,6 +542,9 @@
 
     // Dropdown toggle
     document.getElementById("classDropdownBtn").addEventListener("click", () => {
+      const btn = document.getElementById("classDropdownBtn");
+      if (btn.disabled) return; // prevents opening while loading
+
       if (window.innerWidth > 600) {
         const container = document.getElementById("classDropdownContent");
         container.style.display = container.style.display === "block" ? "none" : "block";
@@ -504,6 +557,7 @@
     function closeModal() {
       document.getElementById("classModal").style.display = "none";
       syncDesktopCheckboxes();
+      updateClassButtonText();
     }
 
     function syncDesktopCheckboxes() {
@@ -520,35 +574,51 @@
 
     // ---------- submit ----------
     async function submitForm() {
-      const selected = [...document.querySelectorAll("#classDropdownContent input:checked")].map(cb => cb.value);
-
-      const data = {
-        number: number.value,
-        firstName: firstName.value,
-        lastName: lastName.value,
-        age: +age.value,
-        division: division.value,
-        horse: horse.value,
-        classes: selected
-      };
-
-      if (!data.number || data.classes.length === 0) {
-        alert("Rider Number and at least one class are required.");
-        return;
+      const submitBtn = document.querySelector('button[onclick="submitForm()"]');
+      if (submitBtn) {
+        submitBtn.dataset.normalText = submitBtn.textContent || "Submit";
+        submitBtn.textContent = "Submitting...";
+        submitBtn.disabled = true;
+        submitBtn.setAttribute("aria-busy", "true");
       }
 
-      const { res, out } = await rawApiPost("submitForm", data);
+      try {
+        const selected = [...document.querySelectorAll("#classDropdownContent input:checked")].map(cb => cb.value);
 
-      if (!res.ok || out.error) {
-        console.error("Submit error:", out);
-        alert("Submit failed: " + (out.error || res.statusText));
-        return;
+        const data = {
+          number: number.value,
+          firstName: firstName.value,
+          lastName: lastName.value,
+          age: +age.value,
+          division: division.value,
+          horse: horse.value,
+          classes: selected
+        };
+
+        if (!data.number || data.classes.length === 0) {
+          alert("Rider Number and at least one class are required.");
+          return;
+        }
+
+        const { res, out } = await rawApiPost("submitForm", data);
+
+        if (!res.ok || out.error) {
+          console.error("Submit error:", out);
+          alert("Submit failed: " + (out.error || res.statusText));
+          return;
+        }
+
+        _versionsPromise = null;
+        await ensureVersionsFresh().catch(() => {});
+
+        alert("Form submitted!");
+      } finally {
+        if (submitBtn) {
+          submitBtn.textContent = submitBtn.dataset.normalText || "Submit";
+          submitBtn.disabled = false;
+          submitBtn.removeAttribute("aria-busy");
+        }
       }
-
-      _versionsPromise = null;
-      await ensureVersionsFresh().catch(() => {});
-
-      alert("Form submitted!");
     }
 
     // ----- CLOSE MODAL ONLY WHEN CLICKING THE BACKDROP -----
