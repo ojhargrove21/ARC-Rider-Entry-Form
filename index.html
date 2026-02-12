@@ -39,6 +39,14 @@
       margin: 30px 0;
     }
 
+    /* Plain-text loading indicator */
+    #loadingText {
+      display: none;
+      margin: 10px 0 0;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
     /* Dropdown desktop */
     .dropdown { position: relative; width: 100%; }
 
@@ -111,6 +119,9 @@
 <body>
   <h1 role="main">Entry Form</h1>
 
+  <!-- Plain text loading indicator -->
+  <div id="loadingText" role="status" aria-live="polite">Loading...</div>
+
   <label for="number">Rider Number:</label>
   <input id="number" list="riderNumbers" placeholder="Select or type Rider Number" onchange="loadRider()">
   <datalist id="riderNumbers"></datalist>
@@ -155,49 +166,52 @@
     const API_BASE = "https://script.google.com/macros/s/AKfycbyoNwykcNDis55g2Qzyg0xlcyVy6xinGrxOKNV_YCMnRTFcD3iYUXU_07saZhOKeFgPtw/exec";
 
     /*****************************************************************
+     * LOADING INDICATOR (plain text)
+     *****************************************************************/
+    const loadingEl = document.getElementById("loadingText");
+    let loadingCount = 0;
+
+    function showLoading(text = "Loading...") {
+      loadingCount++;
+      loadingEl.textContent = text;
+      loadingEl.style.display = "block";
+    }
+
+    function hideLoading() {
+      loadingCount = Math.max(0, loadingCount - 1);
+      if (loadingCount === 0) loadingEl.style.display = "none";
+    }
+
+    async function withLoading(promiseFactory, text) {
+      showLoading(text);
+      try {
+        return await promiseFactory();
+      } finally {
+        hideLoading();
+      }
+    }
+
+    /*****************************************************************
      * GROUPED CACHE (per "page/sheet group") using getVersions
-     *
-     * Requires Code.gs to support:
-     *   GET ?action=getVersions
-     * returning:
-     *   { riders:"...", divisions:"...", classes:"...", altClasses:"...", events:"...", entries:"..." }
-     *
-     * We cache GET responses in localStorage with a "group" prefix:
-     *   entryform:riders:...
-     *   entryform:divisions:...
-     *   entryform:classes:...
-     *   entryform:events:...
-     *
-     * When a group version changes, we clear ONLY that group's keys.
      *****************************************************************/
     const CACHE_PREFIX = "entryform:";
     const VERSION_STORE_KEY = CACHE_PREFIX + "versions";
     const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // safety fallback (6h)
 
-    // Map each API action to a "group" (choose groups that match your sheet tabs)
     function groupForAction(action) {
       switch (action) {
-        // Riders sheet
         case "getRiderNumberMap":
         case "findRider":
           return "riders";
-
-        // Divisions sheet
         case "getDivisions":
           return "divisions";
-
-        // Classes depend on Events + (Classes/Alternate Classes). We treat as "classes"
         case "getClasses":
           return "classes";
-
-        // If you later add endpoints, map them here.
         default:
           return "misc";
       }
     }
 
-    // Which server versions should invalidate a group?
-    // You can tune this logic. For getClasses, changes to events OR classes OR altClasses matter.
     function dependsOnVersions(group) {
       switch (group) {
         case "riders":
@@ -205,7 +219,7 @@
         case "divisions":
           return ["divisions"];
         case "classes":
-          return ["events", "classes", "altClasses"]; // all can affect class list
+          return ["events", "classes", "altClasses"];
         default:
           return ["events", "classes", "altClasses", "riders", "divisions", "entries"];
       }
@@ -218,9 +232,12 @@
         if (v !== undefined && v !== null) url.searchParams.set(k, v);
       });
 
-      const res = await fetch(url.toString(), { method: "GET", redirect: "follow" });
-      if (!res.ok) throw new Error("GET failed: " + res.status);
-      return await res.json();
+      // show loading for actual network GETs
+      return await withLoading(async () => {
+        const res = await fetch(url.toString(), { method: "GET", redirect: "follow" });
+        if (!res.ok) throw new Error("GET failed: " + res.status);
+        return await res.json();
+      }, "Loading...");
     }
 
     async function rawApiPost(action, payloadObj) {
@@ -228,15 +245,15 @@
       body.set("action", action);
       body.set("payload", JSON.stringify(payloadObj || {}));
 
-      const res = await fetch(API_BASE, { method: "POST", body, redirect: "follow" });
-      const out = await res.json().catch(() => ({}));
-      return { res, out };
+      return await withLoading(async () => {
+        const res = await fetch(API_BASE, { method: "POST", body, redirect: "follow" });
+        const out = await res.json().catch(() => ({}));
+        return { res, out };
+      }, "Submitting...");
     }
 
     async function getServerVersions() {
-      // Code.gs must support this
       const v = await rawApiGet("getVersions");
-      // Normalize values to strings
       return {
         riders: String(v.riders || "0"),
         divisions: String(v.divisions || "0"),
@@ -298,45 +315,44 @@
       if (_versionsPromise) return _versionsPromise;
 
       _versionsPromise = (async () => {
-        const serverV = await getServerVersions();
-        const localV = loadLocalVersions();
+        // show loading for version refresh
+        showLoading("Checking for updates...");
+        try {
+          const serverV = await getServerVersions();
+          const localV = loadLocalVersions();
 
-        if (!localV) {
-          // First time: store versions but don't clear anything
-          saveLocalVersions(serverV);
-          return serverV;
-        }
+          if (!localV) {
+            saveLocalVersions(serverV);
+            return serverV;
+          }
 
-        // Compare per-version key; clear only groups that depend on a changed version
-        const changed = [];
-        Object.keys(serverV).forEach(k => {
-          if (String(localV[k] || "0") !== String(serverV[k] || "0")) changed.push(k);
-        });
-
-        if (changed.length) {
-          // For each group, if any dependency changed, clear that group's cache
-          const groups = ["riders", "divisions", "classes", "misc"];
-          groups.forEach(g => {
-            const deps = dependsOnVersions(g);
-            const hit = deps.some(dep => changed.includes(dep));
-            if (hit) clearGroupCache(g);
+          const changed = [];
+          Object.keys(serverV).forEach(k => {
+            if (String(localV[k] || "0") !== String(serverV[k] || "0")) changed.push(k);
           });
 
-          // Save new versions
-          saveLocalVersions(serverV);
-        }
+          if (changed.length) {
+            const groups = ["riders", "divisions", "classes", "misc"];
+            groups.forEach(g => {
+              const deps = dependsOnVersions(g);
+              const hit = deps.some(dep => changed.includes(dep));
+              if (hit) clearGroupCache(g);
+            });
+            saveLocalVersions(serverV);
+          }
 
-        return serverV;
+          return serverV;
+        } finally {
+          hideLoading();
+        }
       })();
 
       return _versionsPromise;
     }
 
     async function apiGet(action, params = {}) {
-      // Do not cache version calls themselves
       if (action === "getVersions") return rawApiGet(action, params);
 
-      // Ensure we only clear the specific group caches that must be cleared
       await ensureVersionsFresh();
 
       const group = groupForAction(action);
@@ -347,7 +363,6 @@
 
       const data = await rawApiGet(action, params);
 
-      // Don't cache errors
       if (data && typeof data === "object" && data.error) return data;
 
       writeCache(key, data);
@@ -358,7 +373,7 @@
     setInterval(() => {
       _versionsPromise = null;
       ensureVersionsFresh().catch(() => {});
-    }, 120000); // every 2 min
+    }, 120000);
 
     // ---------- helpers ----------
     function setFieldState(readOnly) {
@@ -367,8 +382,10 @@
 
     // ---------- init ----------
     document.addEventListener("DOMContentLoaded", async () => {
-      await populateDivisions();
-      await buildRiderNumberList();
+      await withLoading(async () => {
+        await populateDivisions();
+        await buildRiderNumberList();
+      }, "Loading form...");
     });
 
     // ---------- divisions ----------
@@ -383,10 +400,9 @@
       });
     }
 
-    // ---------- rider numbers (include 1-200 + >200 in sheet) ----------
+    // ---------- rider numbers ----------
     async function buildRiderNumberList() {
       const existingMap = await apiGet("getRiderNumberMap");
-
       const datalist = document.getElementById("riderNumbers");
       datalist.innerHTML = "";
 
@@ -414,7 +430,10 @@
       const number = document.getElementById("number").value;
       if (!number) return;
 
-      const rider = await apiGet("findRider", { number });
+      const rider = await withLoading(
+        () => apiGet("findRider", { number }),
+        "Loading rider..."
+      );
 
       if (rider.exists) {
         firstName.value = rider.firstName || "";
@@ -436,7 +455,11 @@
       const division = document.getElementById("division").value;
       if (!division) return;
 
-      const items = await apiGet("getClasses", { division });
+      const items = await withLoading(
+        () => apiGet("getClasses", { division }),
+        "Loading classes..."
+      );
+
       renderClasses(items);
     }
 
@@ -447,7 +470,6 @@
       modalContainer.innerHTML = "";
 
       items.forEach((item, i) => {
-        // Desktop
         const label = document.createElement("label");
         const cb = document.createElement("input");
         cb.type = "checkbox";
@@ -457,7 +479,6 @@
         label.appendChild(document.createTextNode(" " + item));
         desktopContainer.appendChild(label);
 
-        // Mobile modal
         const mlabel = document.createElement("label");
         const mcb = document.createElement("input");
         mcb.type = "checkbox";
@@ -524,14 +545,8 @@
         return;
       }
 
-      // After a successful submit:
-      // - Riders + Entries versions likely changed on the server
-      // - So re-check versions; this will clear ONLY the affected groups
       _versionsPromise = null;
       await ensureVersionsFresh().catch(() => {});
-
-      // Optional: refresh UI lists (only needed if you want the datalist updated immediately)
-      // await buildRiderNumberList();
 
       alert("Form submitted!");
     }
@@ -567,4 +582,3 @@
   </script>
 </body>
 </html>
-
