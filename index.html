@@ -11,15 +11,9 @@
       background: #f9f9f9;
     }
 
-    body {
-      padding: 20px;
-      margin: auto;
-    }
+    body { padding: 20px; margin: auto; }
 
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
+    h1 { text-align: center; margin-bottom: 20px; }
 
     label, .section_label {
       font-weight: bold;
@@ -46,10 +40,7 @@
     }
 
     /* Dropdown desktop */
-    .dropdown {
-      position: relative;
-      width: 100%;
-    }
+    .dropdown { position: relative; width: 100%; }
 
     .dropdown button {
       width: 100%;
@@ -103,10 +94,7 @@
       box-sizing: border-box;
     }
 
-    .modal-header {
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
+    .modal-header { font-weight: bold; margin-bottom: 10px; }
 
     .modal label {
       display: block;
@@ -119,6 +107,7 @@
   </style>
   <title>Entry Form</title>
 </head>
+
 <body>
   <h1 role="main">Entry Form</h1>
 
@@ -163,17 +152,64 @@
 
   <script>
     // ✅ MUST be the deployed /exec URL, not /dev
-    const API_BASE = "https://script.google.com/macros/s/AKfycbxqVu8AmUTxXILaIYUXiv2bnbMjYeBsrb6ubixmrnOBsXSpIm4i-OfSaCcta067q3A5Kw/exec";
+    const API_BASE = "https://script.google.com/macros/s/AKfycbzU8OQvR76mXK_sE6hxpYr3Aj-ZyEmd15bfeyNptz-nJyzAwGxXmMc7DSdJVHtCxKZ7Xg/exec";
 
-    /****************************************************
-     * CLIENT CACHE (Version-based)
-     * - Calls getVersion once per page load (and periodically)
-     * - Clears localStorage cache if version changed
-     * - Caches every GET response in localStorage
-     ****************************************************/
+    /*****************************************************************
+     * GROUPED CACHE (per "page/sheet group") using getVersions
+     *
+     * Requires Code.gs to support:
+     *   GET ?action=getVersions
+     * returning:
+     *   { riders:"...", divisions:"...", classes:"...", altClasses:"...", events:"...", entries:"..." }
+     *
+     * We cache GET responses in localStorage with a "group" prefix:
+     *   entryform:riders:...
+     *   entryform:divisions:...
+     *   entryform:classes:...
+     *   entryform:events:...
+     *
+     * When a group version changes, we clear ONLY that group's keys.
+     *****************************************************************/
     const CACHE_PREFIX = "entryform:";
-    const VERSION_KEY = CACHE_PREFIX + "version";
-    const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h safety fallback
+    const VERSION_STORE_KEY = CACHE_PREFIX + "versions";
+    const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // safety fallback (6h)
+
+    // Map each API action to a "group" (choose groups that match your sheet tabs)
+    function groupForAction(action) {
+      switch (action) {
+        // Riders sheet
+        case "getRiderNumberMap":
+        case "findRider":
+          return "riders";
+
+        // Divisions sheet
+        case "getDivisions":
+          return "divisions";
+
+        // Classes depend on Events + (Classes/Alternate Classes). We treat as "classes"
+        case "getClasses":
+          return "classes";
+
+        // If you later add endpoints, map them here.
+        default:
+          return "misc";
+      }
+    }
+
+    // Which server versions should invalidate a group?
+    // You can tune this logic. For getClasses, changes to events OR classes OR altClasses matter.
+    function dependsOnVersions(group) {
+      switch (group) {
+        case "riders":
+          return ["riders"];
+        case "divisions":
+          return ["divisions"];
+        case "classes":
+          return ["events", "classes", "altClasses"]; // all can affect class list
+        default:
+          return ["events", "classes", "altClasses", "riders", "divisions", "entries"];
+      }
+    }
 
     async function rawApiGet(action, params = {}) {
       const url = new URL(API_BASE);
@@ -187,19 +223,55 @@
       return await res.json();
     }
 
-    async function getServerVersion() {
-      const r = await rawApiGet("getVersion");
-      return String(r.version || "0");
+    async function rawApiPost(action, payloadObj) {
+      const body = new URLSearchParams();
+      body.set("action", action);
+      body.set("payload", JSON.stringify(payloadObj || {}));
+
+      const res = await fetch(API_BASE, { method: "POST", body, redirect: "follow" });
+      const out = await res.json().catch(() => ({}));
+      return { res, out };
     }
 
-    function clearAllCache() {
+    async function getServerVersions() {
+      // Code.gs must support this
+      const v = await rawApiGet("getVersions");
+      // Normalize values to strings
+      return {
+        riders: String(v.riders || "0"),
+        divisions: String(v.divisions || "0"),
+        classes: String(v.classes || "0"),
+        altClasses: String(v.altClasses || "0"),
+        events: String(v.events || "0"),
+        entries: String(v.entries || "0"),
+      };
+    }
+
+    function loadLocalVersions() {
+      try {
+        const raw = localStorage.getItem(VERSION_STORE_KEY);
+        if (!raw) return null;
+        const v = JSON.parse(raw);
+        if (!v || typeof v !== "object") return null;
+        return v;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveLocalVersions(v) {
+      try { localStorage.setItem(VERSION_STORE_KEY, JSON.stringify(v)); } catch {}
+    }
+
+    function clearGroupCache(group) {
+      const prefix = `${CACHE_PREFIX}${group}:`;
       Object.keys(localStorage).forEach(k => {
-        if (k.startsWith(CACHE_PREFIX) && k !== VERSION_KEY) localStorage.removeItem(k);
+        if (k.startsWith(prefix)) localStorage.removeItem(k);
       });
     }
 
-    function cacheKeyFor(action, params) {
-      return CACHE_PREFIX + action + ":" + JSON.stringify(params || {});
+    function cacheKeyFor(group, action, params) {
+      return `${CACHE_PREFIX}${group}:${action}:${JSON.stringify(params || {})}`;
     }
 
     function readCache(key) {
@@ -208,7 +280,8 @@
         if (!raw) return null;
         const obj = JSON.parse(raw);
         if (!obj || typeof obj !== "object") return null;
-        if (!obj.savedAt || (Date.now() - obj.savedAt) > CACHE_TTL_MS) return null;
+        if (!obj.savedAt) return null;
+        if ((Date.now() - obj.savedAt) > CACHE_TTL_MS) return null;
         return obj.data;
       } catch {
         return null;
@@ -216,54 +289,76 @@
     }
 
     function writeCache(key, data) {
-      try {
-        localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data }));
-      } catch {
-        // if storage is full / blocked, just skip caching
-      }
+      try { localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data })); } catch {}
     }
 
-    let _versionPromise = null;
+    let _versionsPromise = null;
 
-    async function ensureVersionFresh() {
-      if (!_versionPromise) {
-        _versionPromise = (async () => {
-          const serverV = await getServerVersion();
-          const localV = localStorage.getItem(VERSION_KEY);
+    async function ensureVersionsFresh() {
+      if (_versionsPromise) return _versionsPromise;
 
-          if (localV !== serverV) {
-            // Version changed => dump cached GET responses
-            clearAllCache();
-            localStorage.setItem(VERSION_KEY, serverV);
-          }
+      _versionsPromise = (async () => {
+        const serverV = await getServerVersions();
+        const localV = loadLocalVersions();
+
+        if (!localV) {
+          // First time: store versions but don't clear anything
+          saveLocalVersions(serverV);
           return serverV;
-        })();
-      }
-      return _versionPromise;
+        }
+
+        // Compare per-version key; clear only groups that depend on a changed version
+        const changed = [];
+        Object.keys(serverV).forEach(k => {
+          if (String(localV[k] || "0") !== String(serverV[k] || "0")) changed.push(k);
+        });
+
+        if (changed.length) {
+          // For each group, if any dependency changed, clear that group's cache
+          const groups = ["riders", "divisions", "classes", "misc"];
+          groups.forEach(g => {
+            const deps = dependsOnVersions(g);
+            const hit = deps.some(dep => changed.includes(dep));
+            if (hit) clearGroupCache(g);
+          });
+
+          // Save new versions
+          saveLocalVersions(serverV);
+        }
+
+        return serverV;
+      })();
+
+      return _versionsPromise;
     }
 
     async function apiGet(action, params = {}) {
-      // Ensure cache invalidation is handled first
-      await ensureVersionFresh();
+      // Do not cache version calls themselves
+      if (action === "getVersions") return rawApiGet(action, params);
 
-      // Do not cache version call itself
-      if (action === "getVersion") return rawApiGet(action, params);
+      // Ensure we only clear the specific group caches that must be cleared
+      await ensureVersionsFresh();
 
-      const key = cacheKeyFor(action, params);
+      const group = groupForAction(action);
+      const key = cacheKeyFor(group, action, params);
+
       const cached = readCache(key);
       if (cached !== null) return cached;
 
       const data = await rawApiGet(action, params);
 
-      // If server returns an error object, don't cache it
+      // Don't cache errors
       if (data && typeof data === "object" && data.error) return data;
 
       writeCache(key, data);
       return data;
     }
 
-    // Optional: re-check version every 2 minutes (keeps long-open page accurate)
-    setInterval(() => { _versionPromise = null; ensureVersionFresh().catch(() => {}); }, 120000);
+    // Optional: refresh versions periodically for long-open pages
+    setInterval(() => {
+      _versionsPromise = null;
+      ensureVersionsFresh().catch(() => {});
+    }, 120000); // every 2 min
 
     // ---------- helpers ----------
     function setFieldState(readOnly) {
@@ -290,12 +385,11 @@
 
     // ---------- rider numbers (include 1-200 + >200 in sheet) ----------
     async function buildRiderNumberList() {
-      const existingMap = await apiGet("getRiderNumberMap"); // { "1":"First Last", "203":"..." ...}
+      const existingMap = await apiGet("getRiderNumberMap");
 
       const datalist = document.getElementById("riderNumbers");
       datalist.innerHTML = "";
 
-      // Always include 1–200 (even if not in sheet)
       for (let i = 1; i <= 200; i++) {
         const option = document.createElement("option");
         option.value = i;
@@ -303,7 +397,6 @@
         datalist.appendChild(option);
       }
 
-      // Include >200 from sheet
       Object.keys(existingMap)
         .map(Number)
         .filter(n => n > 200)
@@ -423,13 +516,7 @@
         return;
       }
 
-      // ✅ Simple POST (application/x-www-form-urlencoded) => no preflight
-      const body = new URLSearchParams();
-      body.set("action", "submitForm");
-      body.set("payload", JSON.stringify(data));
-
-      const res = await fetch(API_BASE, { method: "POST", body, redirect: "follow" });
-      const out = await res.json().catch(() => ({}));
+      const { res, out } = await rawApiPost("submitForm", data);
 
       if (!res.ok || out.error) {
         console.error("Submit error:", out);
@@ -437,11 +524,13 @@
         return;
       }
 
-      // After a successful submit, server version has changed.
-      // Force a version refresh so cached GETs re-pull next time.
-      _versionPromise = null;
-      await ensureVersionFresh().catch(() => {});
-      // Optionally refresh local UI lists:
+      // After a successful submit:
+      // - Riders + Entries versions likely changed on the server
+      // - So re-check versions; this will clear ONLY the affected groups
+      _versionsPromise = null;
+      await ensureVersionsFresh().catch(() => {});
+
+      // Optional: refresh UI lists (only needed if you want the datalist updated immediately)
       // await buildRiderNumberList();
 
       alert("Form submitted!");
