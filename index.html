@@ -132,7 +132,7 @@
     /*****************************************************************
      * INLINE LOADING PLACEHOLDERS (per area being loaded)
      *****************************************************************/
-    function setLoadingButton(btnEl, isLoading, loadingText = "Loading...", normalText = "Select Classes") {
+    function setLoadingButton(btnEl, isLoading, loadingText = "Loading...", normalText = "-- Select Classes --") {
       if (!btnEl) return;
       if (isLoading) {
         btnEl.dataset.normalText = btnEl.textContent || normalText;
@@ -571,6 +571,7 @@
   </script>
 </body>
 </html>
+
 
 
 
