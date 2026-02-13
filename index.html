@@ -152,7 +152,7 @@
 
   <script>
     // ✅ MUST be the deployed /exec URL, not /dev
-    const API_BASE = "https://script.google.com/macros/s/AKfycbyqDsuw_Jf2fSzPSmP6tH2cDTm1YKsLqRMonpirQvJsc5F0uvZNKEZhxQwyfv_6yRAZJw/exec";
+    const API_BASE = "https://script.google.com/macros/s/AKfycbwLxeapKQYpaYUNvsvGUZ71fFPXWVBGjlEPXSpmweTLs_YcPgkdvCBcu_whm74Ml3WH1Q/exec";
 
     /*****************************************************************
      * INLINE LOADING PLACEHOLDERS (per area being loaded)
@@ -261,18 +261,6 @@
       return { res, out };
     }
 
-    async function getServerVersions() {
-      const v = await rawApiGet("getVersions");
-      return {
-        riders: String(v.riders || "0"),
-        divisions: String(v.divisions || "0"),
-        classes: String(v.classes || "0"),
-        altClasses: String(v.altClasses || "0"),
-        events: String(v.events || "0"),
-        entries: String(v.entries || "0"),
-      };
-    }
-
     function loadLocalVersions() {
       try {
         const raw = localStorage.getItem(VERSION_STORE_KEY);
@@ -324,7 +312,7 @@
       if (_versionsPromise) return _versionsPromise;
 
       _versionsPromise = (async () => {
-        const serverV = await rawApiGet("getVersions"); // do not recurse into apiGet
+        const serverV = await rawApiGet("getVersions");
         const normalizedServerV = {
           riders: String(serverV.riders || "0"),
           divisions: String(serverV.divisions || "0"),
@@ -381,7 +369,7 @@
       return data;
     }
 
-    // Optional: refresh versions periodically for long-open pages
+    // Refresh versions periodically for long-open pages
     setInterval(() => {
       _versionsPromise = null;
       ensureVersionsFresh().catch(() => {});
@@ -394,7 +382,7 @@
 
     function updateClassButtonText() {
       const btn = document.getElementById("classDropdownBtn");
-      if (!btn || btn.disabled) return; // don't override "Loading..."
+      if (!btn || btn.disabled) return;
       const selected = [...document.querySelectorAll("#classDropdownContent input:checked")].length;
       btn.textContent = selected ? `Select Classes (${selected} selected)` : "Select Classes";
     }
@@ -494,13 +482,9 @@
       try {
         const items = await apiGet("getClasses", { division });
         renderClasses(items);
-
-        // Close dropdown while reloading
         document.getElementById("classDropdownContent").style.display = "none";
-
         updateClassButtonText();
       } finally {
-        // restore normal text (or "(n selected)" via updateClassButtonText)
         setLoadingButton(btn, false, "Loading...", "Select Classes");
         updateClassButtonText();
       }
@@ -513,7 +497,6 @@
       modalContainer.innerHTML = "";
 
       items.forEach((item, i) => {
-        // Desktop
         const label = document.createElement("label");
         const cb = document.createElement("input");
         cb.type = "checkbox";
@@ -524,7 +507,6 @@
         label.appendChild(document.createTextNode(" " + item));
         desktopContainer.appendChild(label);
 
-        // Mobile modal
         const mlabel = document.createElement("label");
         const mcb = document.createElement("input");
         mcb.type = "checkbox";
@@ -540,10 +522,9 @@
       });
     }
 
-    // Dropdown toggle
     document.getElementById("classDropdownBtn").addEventListener("click", () => {
       const btn = document.getElementById("classDropdownBtn");
-      if (btn.disabled) return; // prevents opening while loading
+      if (btn.disabled) return;
 
       if (window.innerWidth > 600) {
         const container = document.getElementById("classDropdownContent");
@@ -611,7 +592,7 @@
         _versionsPromise = null;
         await ensureVersionsFresh().catch(() => {});
 
-        alert("Form submitted!");
+        alert(out.updatedExisting ? "Entry updated!" : "Entry created!");
       } finally {
         if (submitBtn) {
           submitBtn.textContent = submitBtn.dataset.normalText || "Submit";
@@ -652,6 +633,3 @@
   </script>
 </body>
 </html>
-
-
-
