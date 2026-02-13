@@ -39,40 +39,10 @@
       margin: 30px 0;
     }
 
-    /* Dropdown desktop */
+    /* Desktop dropdown container still exists but we will always use modal */
     .dropdown { position: relative; width: 100%; }
 
-    .dropdown button {
-      width: 100%;
-      text-align: left;
-      background-color: #fff;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 10px;
-    }
-
-    .dropdown-content {
-      display: none;
-      position: absolute;
-      width: 100%;
-      max-height: 200px;
-      overflow-y: auto;
-      background-color: #fff;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      z-index: 10;
-      box-sizing: border-box;
-    }
-
-    .dropdown-content label {
-      display: block;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-
-    .dropdown-content label:hover { background-color: #f0f0f0; }
-
-    /* Modal for mobile */
+    /* Modal (now used on ALL screen sizes) */
     .modal {
       display: none;
       position: fixed;
@@ -86,7 +56,7 @@
     .modal-content {
       background-color: #fff;
       width: 90%;
-      max-width: 400px;
+      max-width: 520px;          /* a little wider for desktop */
       max-height: 80vh;
       overflow-y: auto;
       border-radius: 8px;
@@ -104,6 +74,9 @@
     }
 
     .modal button { margin-top: 10px; }
+
+    /* Hide the old desktop dropdown content since we’re not using it */
+    #classDropdownContent { display: none !important; }
   </style>
   <title>Entry Form</title>
 </head>
@@ -137,12 +110,14 @@
   <div class="section_label">Select Classes:</div>
   <div class="dropdown" id="dropdownContainer">
     <button type="button" id="classDropdownBtn">Select Classes</button>
-    <div class="dropdown-content" id="classDropdownContent"></div>
+    <!-- kept for compatibility with existing code (not used) -->
+    <div id="classDropdownContent"></div>
   </div>
 
-  <div class="modal" id="classModal">
+  <!-- ✅ Modal used on BOTH mobile + desktop -->
+  <div class="modal" id="classModal" aria-modal="true" role="dialog" aria-labelledby="classModalTitle">
     <div class="modal-content" id="classModalContent">
-      <div class="modal-header">Select Classes</div>
+      <div class="modal-header" id="classModalTitle">Select Classes</div>
       <div id="modalCheckboxes"></div>
       <button type="button" onclick="closeModal()">Done</button>
     </div>
@@ -362,14 +337,12 @@
       if (cached !== null) return cached;
 
       const data = await rawApiGet(action, params);
-
       if (data && typeof data === "object" && data.error) return data;
 
       writeCache(key, data);
       return data;
     }
 
-    // Refresh versions periodically for long-open pages
     setInterval(() => {
       _versionsPromise = null;
       ensureVersionsFresh().catch(() => {});
@@ -383,7 +356,8 @@
     function updateClassButtonText() {
       const btn = document.getElementById("classDropdownBtn");
       if (!btn || btn.disabled) return;
-      const selected = [...document.querySelectorAll("#classDropdownContent input:checked")].length;
+
+      const selected = [...document.querySelectorAll("#modalCheckboxes input:checked")].length;
       btn.textContent = selected ? `Select Classes (${selected} selected)` : "Select Classes";
     }
 
@@ -391,19 +365,13 @@
     document.addEventListener("DOMContentLoaded", async () => {
       const divisionSelect = document.getElementById("division");
       setLoadingSelect(divisionSelect, true, "Loading divisions...", "-- Select Division --");
-      try {
-        await populateDivisions();
-      } finally {
-        setLoadingSelect(divisionSelect, false, "Loading divisions...", "-- Select Division --");
-      }
+      try { await populateDivisions(); }
+      finally { setLoadingSelect(divisionSelect, false, "Loading divisions...", "-- Select Division --"); }
 
       const numberInput = document.getElementById("number");
       setLoadingInputPlaceholder(numberInput, true, "Loading rider list...");
-      try {
-        await buildRiderNumberList();
-      } finally {
-        setLoadingInputPlaceholder(numberInput, false, "Loading rider list...");
-      }
+      try { await buildRiderNumberList(); }
+      finally { setLoadingInputPlaceholder(numberInput, false, "Loading rider list..."); }
     });
 
     // ---------- divisions ----------
@@ -481,8 +449,10 @@
 
       try {
         const items = await apiGet("getClasses", { division });
-        renderClasses(items);
-        document.getElementById("classDropdownContent").style.display = "none";
+        renderClassesIntoModal(items);
+
+        // Always open modal (desktop + mobile)
+        openModal();
         updateClassButtonText();
       } finally {
         setLoadingButton(btn, false, "Loading...", "Select Classes");
@@ -490,10 +460,8 @@
       }
     }
 
-    function renderClasses(items) {
-      const desktopContainer = document.getElementById("classDropdownContent");
+    function renderClassesIntoModal(items) {
       const modalContainer = document.getElementById("modalCheckboxes");
-      desktopContainer.innerHTML = "";
       modalContainer.innerHTML = "";
 
       items.forEach((item, i) => {
@@ -501,56 +469,35 @@
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.value = item;
-        cb.id = "class_" + i;
+        cb.id = "modal_" + i;
         cb.addEventListener("change", updateClassButtonText);
         label.appendChild(cb);
         label.appendChild(document.createTextNode(" " + item));
-        desktopContainer.appendChild(label);
-
-        const mlabel = document.createElement("label");
-        const mcb = document.createElement("input");
-        mcb.type = "checkbox";
-        mcb.value = item;
-        mcb.id = "modal_" + i;
-        mcb.addEventListener("change", () => {
-          syncDesktopCheckboxes();
-          updateClassButtonText();
-        });
-        mlabel.appendChild(mcb);
-        mlabel.appendChild(document.createTextNode(" " + item));
-        modalContainer.appendChild(mlabel);
+        modalContainer.appendChild(label);
       });
     }
 
+    // ✅ Button always opens modal now
     document.getElementById("classDropdownBtn").addEventListener("click", () => {
       const btn = document.getElementById("classDropdownBtn");
       if (btn.disabled) return;
-
-      if (window.innerWidth > 600) {
-        const container = document.getElementById("classDropdownContent");
-        container.style.display = container.style.display === "block" ? "none" : "block";
-      } else {
-        document.getElementById("classModal").style.display = "flex";
-        syncModalCheckboxes();
-      }
+      openModal();
     });
+
+    function openModal() {
+      document.getElementById("classModal").style.display = "flex";
+      // focus first checkbox if present for keyboard users
+      setTimeout(() => {
+        const first = document.querySelector("#modalCheckboxes input");
+        if (first) first.focus();
+      }, 0);
+    }
 
     function closeModal() {
       document.getElementById("classModal").style.display = "none";
-      syncDesktopCheckboxes();
       updateClassButtonText();
-    }
-
-    function syncDesktopCheckboxes() {
-      const modalChecks = document.querySelectorAll("#modalCheckboxes input");
-      const desktopChecks = document.querySelectorAll("#classDropdownContent input");
-      modalChecks.forEach((mcb, i) => { if (desktopChecks[i]) desktopChecks[i].checked = mcb.checked; });
-    }
-
-    function syncModalCheckboxes() {
-      const modalChecks = document.querySelectorAll("#modalCheckboxes input");
-      const desktopChecks = document.querySelectorAll("#classDropdownContent input");
-      modalChecks.forEach((mcb, i) => { if (desktopChecks[i]) mcb.checked = desktopChecks[i].checked; });
+      // return focus to button
+      document.getElementById("classDropdownBtn").focus();
     }
 
     // ---------- submit ----------
@@ -564,7 +511,8 @@
       }
 
       try {
-        const selected = [...document.querySelectorAll("#classDropdownContent input:checked")].map(cb => cb.value);
+        // ✅ now read from modal checkboxes
+        const selected = [...document.querySelectorAll("#modalCheckboxes input:checked")].map(cb => cb.value);
 
         const data = {
           number: number.value,
@@ -614,20 +562,10 @@
       e.stopPropagation();
     });
 
-    // ----- CLOSE DESKTOP DROPDOWN WHEN CLICKING OUTSIDE -----
-    const dropdownContainer = document.getElementById("dropdownContainer");
-    const dropdownContent = document.getElementById("classDropdownContent");
-
-    document.addEventListener("click", (e) => {
-      if (window.innerWidth <= 600) return;
-      if (!dropdownContainer.contains(e.target)) dropdownContent.style.display = "none";
-    });
-
-    // ----- ESC KEY CLOSES MODAL & DROPDOWN -----
+    // ----- ESC KEY CLOSES MODAL -----
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (classModal.style.display === "flex") closeModal();
-        dropdownContent.style.display = "none";
       }
     });
   </script>
