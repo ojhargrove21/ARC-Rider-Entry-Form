@@ -1,3 +1,4 @@
+<!-- index.html (FULL) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -77,6 +78,34 @@
 
     /* Hide the old desktop dropdown content since we’re not using it */
     #classDropdownContent { display: none !important; }
+
+    /**********************
+     * "No events" page UI
+     **********************/
+    .no-events-wrap {
+      min-height: calc(100vh - 40px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .no-events-card {
+      width: 100%;
+      max-width: 520px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 22px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    .no-events-card h2 { margin: 0 0 10px 0; }
+
+    .no-events-card p {
+      margin: 0 0 14px 0;
+      line-height: 1.4;
+    }
   </style>
   <title>Entry Form</title>
 </head>
@@ -195,6 +224,7 @@
         case "getDivisions":
           return "divisions";
         case "getClasses":
+        case "getActiveEvent":
           return "classes";
         default:
           return "misc";
@@ -361,8 +391,36 @@
       btn.textContent = selected ? `Select Classes (${selected} selected)` : "Select Classes";
     }
 
+    function showNoEventsPage_() {
+      document.body.innerHTML = `
+        <main class="no-events-wrap" role="main">
+          <div class="no-events-card">
+            <h2>No events currently open</h2>
+            <p>Entries are not available right now. Please check back later.</p>
+            <p style="font-size: 13px; color: #555;">
+              If you believe this is a mistake, contact the club administrator.
+            </p>
+          </div>
+        </main>
+      `;
+    }
+
     // ---------- init ----------
     document.addEventListener("DOMContentLoaded", async () => {
+      // 1) Check active event FIRST
+      try {
+        const status = await apiGet("getActiveEvent");
+        if (!status || status.active !== true) {
+          showNoEventsPage_();
+          return;
+        }
+      } catch (err) {
+        console.error("Active event check failed:", err);
+        showNoEventsPage_();
+        return;
+      }
+
+      // 2) Continue normal init if active event exists
       const divisionSelect = document.getElementById("division");
       setLoadingSelect(divisionSelect, true, "Loading divisions...", "-- Select Division --");
       try { await populateDivisions(); }
@@ -450,9 +508,6 @@
       try {
         const items = await apiGet("getClasses", { division });
         renderClassesIntoModal(items);
-
-        // Always open modal (desktop + mobile)
-        //openModal();
         updateClassButtonText();
       } finally {
         setLoadingButton(btn, false, "Loading...", "Select Classes");
@@ -571,8 +626,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
