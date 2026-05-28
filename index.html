@@ -175,15 +175,12 @@
     <button type="button" onclick="submitForm()">Submit</button>
 
     <script>
-        console.log("[INIT] Script loaded.");
 
         const API_BASE = "https://script.google.com/macros/s/AKfycbxZXWkl_2etdAxfr9iIlDmVGLxsg_UEcnu4rnR26yexZ49I3uDmeFNSc0KzBWbbn4P70A/exec";
 
         function setLoadingButton(btnEl, isLoading, loadingText = "Loading...", normalText = "-- Select Classes --") {
-            console.log("[UI] setLoadingButton called:", { isLoading, loadingText, normalText });
 
             if (!btnEl) {
-                console.warn("[UI] setLoadingButton: button not found.");
                 return;
             }
 
@@ -200,10 +197,8 @@
         }
 
         function setLoadingSelect(selectEl, isLoading, loadingText = "Loading...", normalText = "-- Select Division --") {
-            console.log("[UI] setLoadingSelect called:", { isLoading, loadingText, normalText });
 
             if (!selectEl) {
-                console.warn("[UI] setLoadingSelect: select not found.");
                 return;
             }
 
@@ -227,10 +222,8 @@
         }
 
         function setLoadingInputPlaceholder(inputEl, isLoading, loadingText = "Loading...") {
-            console.log("[UI] setLoadingInputPlaceholder called:", { isLoading, loadingText });
 
             if (!inputEl) {
-                console.warn("[UI] setLoadingInputPlaceholder: input not found.");
                 return;
             }
 
@@ -279,7 +272,6 @@
         }
 
         async function rawApiGet(action, params = {}) {
-            console.log("[API GET] Starting:", { action, params });
 
             const url = new URL(API_BASE);
             url.searchParams.set("action", action);
@@ -290,27 +282,23 @@
                 }
             });
 
-            console.log("[API GET] URL:", url.toString());
 
             const res = await fetch(url.toString(), {
                 method: "GET",
                 redirect: "follow"
             });
 
-            console.log("[API GET] Response status:", res.status, res.statusText);
 
             if (!res.ok) {
                 throw new Error("GET failed: " + res.status);
             }
 
             const data = await res.json();
-            console.log("[API GET] Data returned:", data);
 
             return data;
         }
 
         async function rawApiPost(action, payloadObj) {
-            console.log("[API POST] Starting:", { action, payloadObj });
 
             const body = new URLSearchParams();
             body.set("action", action);
@@ -322,14 +310,11 @@
                 redirect: "follow"
             });
 
-            console.log("[API POST] Response status:", res.status, res.statusText);
 
             const out = await res.json().catch((err) => {
-                console.error("[API POST] Failed to parse JSON:", err);
                 return {};
             });
 
-            console.log("[API POST] Data returned:", out);
 
             return { res, out };
         }
@@ -344,7 +329,6 @@
 
                 return v;
             } catch (err) {
-                console.warn("[CACHE] Failed to load local versions:", err);
                 return null;
             }
         }
@@ -352,14 +336,11 @@
         function saveLocalVersions(v) {
             try {
                 localStorage.setItem(VERSION_STORE_KEY, JSON.stringify(v));
-                console.log("[CACHE] Saved local versions:", v);
             } catch (err) {
-                console.warn("[CACHE] Failed to save local versions:", err);
             }
         }
 
         function clearGroupCache(group) {
-            console.log("[CACHE] Clearing group cache:", group);
 
             const prefix = `${CACHE_PREFIX}${group}:`;
 
@@ -378,7 +359,6 @@
             try {
                 const raw = localStorage.getItem(key);
                 if (!raw) {
-                    console.log("[CACHE] Miss:", key);
                     return null;
                 }
 
@@ -387,14 +367,11 @@
                 if (!obj.savedAt) return null;
 
                 if ((Date.now() - obj.savedAt) > CACHE_TTL_MS) {
-                    console.log("[CACHE] Expired:", key);
                     return null;
                 }
 
-                console.log("[CACHE] Hit:", key);
                 return obj.data;
             } catch (err) {
-                console.warn("[CACHE] Failed to read cache:", err);
                 return null;
             }
         }
@@ -406,19 +383,15 @@
                     data
                 }));
 
-                console.log("[CACHE] Wrote:", key);
             } catch (err) {
-                console.warn("[CACHE] Failed to write cache:", err);
             }
         }
 
         let _versionsPromise = null;
 
         async function ensureVersionsFresh() {
-            console.log("[VERSIONS] ensureVersionsFresh called.");
 
             if (_versionsPromise) {
-                console.log("[VERSIONS] Reusing existing version promise.");
                 return _versionsPromise;
             }
 
@@ -434,12 +407,10 @@
                     entries: String(serverV.entries || "0")
                 };
 
-                console.log("[VERSIONS] Server versions:", normalizedServerV);
 
                 const localV = loadLocalVersions();
 
                 if (!localV) {
-                    console.log("[VERSIONS] No local versions found. Saving server versions.");
                     saveLocalVersions(normalizedServerV);
                     return normalizedServerV;
                 }
@@ -452,7 +423,6 @@
                     }
                 });
 
-                console.log("[VERSIONS] Changed keys:", changed);
 
                 if (changed.length) {
                     const groups = ["riders", "divisions", "classes", "misc"];
@@ -476,7 +446,6 @@
         }
 
         async function apiGet(action, params = {}) {
-            console.log("[API CACHED GET] Called:", { action, params });
 
             if (action === "getVersions") {
                 return rawApiGet(action, params);
@@ -489,14 +458,12 @@
 
             const cached = readCache(key);
             if (cached !== null) {
-                console.log("[API CACHED GET] Returning cached data for:", action);
                 return cached;
             }
 
             const data = await rawApiGet(action, params);
 
             if (data && typeof data === "object" && data.error) {
-                console.warn("[API CACHED GET] API returned error:", data);
                 return data;
             }
 
@@ -505,15 +472,12 @@
         }
 
         setInterval(() => {
-            console.log("[VERSIONS] Interval refresh running.");
             _versionsPromise = null;
             ensureVersionsFresh().catch((err) => {
-                console.warn("[VERSIONS] Interval refresh failed:", err);
             });
         }, 120000);
 
         function setFieldState(readOnly) {
-            console.log("[UI] setFieldState:", readOnly);
 
             ["firstName", "lastName", "horse"].forEach(id => {
                 const el = document.getElementById(id);
@@ -525,23 +489,19 @@
             const btn = document.getElementById("classDropdownBtn");
 
             if (!btn) {
-                console.warn("[CLASSES] updateClassButtonText: button not found.");
                 return;
             }
 
             if (btn.disabled) {
-                console.log("[CLASSES] updateClassButtonText skipped because button disabled.");
                 return;
             }
 
             const selected = [...document.querySelectorAll("#modalCheckboxes input:checked")].length;
             btn.textContent = selected ? `Select Classes (${selected} selected)` : "Select Classes";
 
-            console.log("[CLASSES] Button text updated. Selected count:", selected);
         }
 
         function showNoEventsPage_() {
-            console.log("[EVENTS] Showing no events page.");
 
             document.body.innerHTML = `
                 <main class="no-events-wrap" role="main">
@@ -557,11 +517,9 @@
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
-            console.log("[INIT] DOMContentLoaded fired.");
 
             let DocHtml = document.body.innerHTML;
 
-            console.log("[INIT] Saved original form HTML.");
 
             document.body.innerHTML = `
                 <main class="no-events-wrap" role="main">
@@ -572,23 +530,18 @@
                 </main>
             `;
 
-            console.log("[INIT] Temporary loading page shown.");
 
             try {
-                console.log("[EVENTS] Checking active event...");
                 const status = await apiGet("getActiveEvent");
 
-                console.log("[EVENTS] Active event status:", status);
 
                 if (!status || status.active !== true) {
                     showNoEventsPage_();
                     return;
                 } else {
-                    console.log("[EVENTS] Active event found. Restoring form HTML.");
                     document.body.innerHTML = DocHtml;
                 }
             } catch (err) {
-                console.error("[EVENTS] Active event check failed:", err);
                 showNoEventsPage_();
                 return;
             }
@@ -597,11 +550,8 @@
             setLoadingSelect(divisionSelect, true, "Loading divisions...", "-- Select Division --");
 
             try {
-                console.log("[DIVISIONS] Populating divisions...");
                 await populateDivisions();
-                console.log("[DIVISIONS] Divisions populated.");
             } catch (err) {
-                console.error("[DIVISIONS] Failed to populate divisions:", err);
             } finally {
                 setLoadingSelect(divisionSelect, false, "Loading divisions...", "-- Select Division --");
             }
@@ -610,26 +560,20 @@
             setLoadingInputPlaceholder(numberInput, true, "Loading rider list...");
 
             try {
-                console.log("[RIDERS] Building rider number list...");
                 await buildRiderNumberList();
-                console.log("[RIDERS] Rider number list built.");
             } catch (err) {
-                console.error("[RIDERS] Failed to build rider number list:", err);
             } finally {
                 setLoadingInputPlaceholder(numberInput, false, "Loading rider list...");
             }
 
-            console.log("[INIT] Page initialization complete.");
         });
 
         async function populateDivisions() {
             const divisions = await apiGet("getDivisions");
-            console.log("[DIVISIONS] Data returned:", divisions);
 
             const select = document.getElementById("division");
 
             if (!select) {
-                console.warn("[DIVISIONS] Division select not found.");
                 return;
             }
 
@@ -643,12 +587,10 @@
 
         async function buildRiderNumberList() {
             const existingMap = await apiGet("getRiderNumberMap");
-            console.log("[RIDERS] Rider number map:", existingMap);
 
             const datalist = document.getElementById("riderNumbers");
 
             if (!datalist) {
-                console.warn("[RIDERS] Datalist not found.");
                 return;
             }
 
@@ -678,17 +620,14 @@
         }
 
         async function loadRider() {
-            console.log("[RIDER] loadRider called.");
 
             const numberInput = document.getElementById("number");
 
             if (!numberInput) {
-                console.warn("[RIDER] Number input not found.");
                 return;
             }
 
             const number = numberInput.value;
-            console.log("[RIDER] Selected rider number:", number);
 
             if (!number) return;
 
@@ -696,7 +635,6 @@
 
             try {
                 const rider = await apiGet("findRider", { number });
-                console.log("[RIDER] Rider returned:", rider);
 
                 const firstNameEl = document.getElementById("firstName");
                 const lastNameEl = document.getElementById("lastName");
@@ -717,27 +655,22 @@
                     setFieldState(false);
                 }
             } catch (err) {
-                console.error("[RIDER] Failed to load rider:", err);
             } finally {
                 setLoadingInputPlaceholder(numberInput, false, "Loading rider...");
             }
         }
 
         async function loadCheckboxes() {
-            console.log("[CLASSES] loadCheckboxes called.");
 
             const divisionEl = document.getElementById("division");
 
             if (!divisionEl) {
-                console.warn("[CLASSES] Division element not found.");
                 return;
             }
 
             const division = divisionEl.value;
-            console.log("[CLASSES] Selected division:", division);
 
             if (!division) {
-                console.warn("[CLASSES] No division selected. Skipping class load.");
                 return;
             }
 
@@ -746,12 +679,10 @@
 
             try {
                 const items = await apiGet("getClasses", { division });
-                console.log("[CLASSES] Classes returned:", items);
 
                 renderClassesIntoModal(items);
                 updateClassButtonText();
             } catch (err) {
-                console.error("[CLASSES] Failed to load classes:", err);
             } finally {
                 setLoadingButton(btn, false, "Loading classes...", "Select Classes");
                 updateClassButtonText();
@@ -759,19 +690,16 @@
         }
 
         function renderClassesIntoModal(items) {
-            console.log("[CLASSES] renderClassesIntoModal called with:", items);
 
             const modalContainer = document.getElementById("modalCheckboxes");
 
             if (!modalContainer) {
-                console.warn("[CLASSES] modalCheckboxes container not found.");
                 return;
             }
 
             modalContainer.innerHTML = "";
 
             if (!items || !items.length) {
-                console.warn("[CLASSES] No classes found for selected division.");
                 modalContainer.innerHTML = "<p>No classes found for this division.</p>";
                 return;
             }
@@ -785,7 +713,6 @@
                 cb.id = "modal_" + i;
 
                 cb.addEventListener("change", () => {
-                    console.log("[CLASSES] Checkbox changed:", {
                         value: cb.value,
                         checked: cb.checked
                     });
@@ -798,22 +725,16 @@
                 modalContainer.appendChild(label);
             });
 
-            console.log("[CLASSES] Rendered checkbox count:", items.length);
         }
 
         async function handleClassButtonClick() {
-            console.log("[CLASSES] Select Classes button clicked.");
 
             const btn = document.getElementById("classDropdownBtn");
             const divisionEl = document.getElementById("division");
             const modalCheckboxes = document.getElementById("modalCheckboxes");
 
-            console.log("[CLASSES] Button exists:", !!btn);
-            console.log("[CLASSES] Division element exists:", !!divisionEl);
-            console.log("[CLASSES] Modal checkbox container exists:", !!modalCheckboxes);
 
             if (btn && btn.disabled) {
-                console.warn("[CLASSES] Button is disabled. Click ignored.");
                 return;
             }
 
@@ -823,55 +744,44 @@
                 return;
             }
 
-            console.log("[CLASSES] Division selected:", divisionEl.value);
 
             if (!modalCheckboxes || modalCheckboxes.children.length === 0) {
-                console.log("[CLASSES] No class checkboxes currently loaded. Loading now...");
                 await loadCheckboxes();
             } else {
-                console.log("[CLASSES] Existing class checkbox count:", modalCheckboxes.children.length);
             }
 
             openModal();
         }
 
         function openModal() {
-            console.log("[MODAL] openModal called.");
 
             const modal = document.getElementById("classModal");
 
             if (!modal) {
-                console.error("[MODAL] classModal not found. Cannot open modal.");
                 return;
             }
 
             modal.style.display = "flex";
 
-            console.log("[MODAL] Modal display set to:", modal.style.display);
 
             setTimeout(() => {
                 const first = document.querySelector("#modalCheckboxes input");
 
                 if (first) {
-                    console.log("[MODAL] Focusing first checkbox.");
                     first.focus();
                 } else {
-                    console.log("[MODAL] No checkbox found to focus.");
                 }
             }, 0);
         }
 
         function closeModal() {
-            console.log("[MODAL] closeModal called.");
 
             const modal = document.getElementById("classModal");
             const btn = document.getElementById("classDropdownBtn");
 
             if (modal) {
                 modal.style.display = "none";
-                console.log("[MODAL] Modal closed.");
             } else {
-                console.warn("[MODAL] classModal not found while closing.");
             }
 
             updateClassButtonText();
@@ -882,7 +792,6 @@
         }
 
         async function submitForm() {
-            console.log("[SUBMIT] submitForm called.");
 
             const submitBtn = document.querySelector('button[onclick="submitForm()"]');
 
@@ -907,10 +816,8 @@
                     classes: selected
                 };
 
-                console.log("[SUBMIT] Payload:", data);
 
                 if (!data.number || data.classes.length === 0) {
-                    console.warn("[SUBMIT] Missing rider number or selected classes.");
                     alert("Rider Number and at least one class are required.");
                     return;
                 }
@@ -918,7 +825,6 @@
                 const { res, out } = await rawApiPost("submitForm", data);
 
                 if (!res.ok || out.error) {
-                    console.error("[SUBMIT] Submit error:", out);
                     alert("Submit failed: " + (out.error || res.statusText));
                     return;
                 }
@@ -930,8 +836,7 @@
 
                 alert(out.updatedExisting ? "Entry updated!" : "Entry created!");
             } catch (err) {
-                console.error("[SUBMIT] Failed:", err);
-                alert("Submit failed. Check the console for details.");
+                alert("Submit failed.");
             } finally {
                 if (submitBtn) {
                     submitBtn.textContent = submitBtn.dataset.normalText || "Submit";
@@ -948,7 +853,6 @@
             if (!classModal || !classModalContent) return;
 
             if (classModal.style.display === "flex" && e.target === classModal) {
-                console.log("[MODAL] Backdrop clicked. Closing modal.");
                 closeModal();
             }
         });
@@ -958,7 +862,6 @@
                 const classModal = document.getElementById("classModal");
 
                 if (classModal && classModal.style.display === "flex") {
-                    console.log("[MODAL] Escape pressed. Closing modal.");
                     closeModal();
                 }
             }
