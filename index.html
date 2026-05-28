@@ -698,6 +698,7 @@
             const cb = document.createElement("input");
             cb.type = "checkbox";
             cb.value = item;
+            label.style="align-items: center;";
             cb.id = "modal_" + i;
             cb.addEventListener("change", updateClassButtonText);
             label.appendChild(cb);
