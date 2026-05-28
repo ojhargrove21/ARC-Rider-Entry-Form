@@ -80,7 +80,9 @@
         }
 
         .modal label {
-            display: block;
+            display: flex;
+            align-items: center; /* vertically center checkbox and text */
+            gap: 8px;
             padding: 10px;
             cursor: pointer;
             border-bottom: 1px solid #ddd;
@@ -698,7 +700,7 @@
             const cb = document.createElement("input");
             cb.type = "checkbox";
             cb.value = item;
-            label.style="align-items: center;";
+            label.style = "align-items: center;";
             cb.id = "modal_" + i;
             cb.addEventListener("change", updateClassButtonText);
             label.appendChild(cb);
