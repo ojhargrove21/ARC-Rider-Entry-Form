@@ -703,8 +703,8 @@
             label.style = "align-items: center;";
             cb.id = "modal_" + i;
             cb.addEventListener("change", updateClassButtonText);
-            label.appendChild(cb);
             label.appendChild(document.createTextNode(" " + item));
+            label.appendChild(cb);
             modalContainer.appendChild(label);
         });
     }
