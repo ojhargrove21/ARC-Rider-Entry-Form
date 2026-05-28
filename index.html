@@ -690,42 +690,21 @@
         }
 
         function renderClassesIntoModal(items) {
+        const modalContainer = document.getElementById("modalCheckboxes");
+        modalContainer.innerHTML = "";
 
-            const modalContainer = document.getElementById("modalCheckboxes");
-
-            if (!modalContainer) {
-                return;
-            }
-
-            modalContainer.innerHTML = "";
-
-            if (!items || !items.length) {
-                modalContainer.innerHTML = "<p>No classes found for this division.</p>";
-                return;
-            }
-
-            items.forEach((item, i) => {
-                const label = document.createElement("label");
-
-                const cb = document.createElement("input");
-                cb.type = "checkbox";
-                cb.value = item;
-                cb.id = "modal_" + i;
-
-                cb.addEventListener("change", () => {
-                        value: cb.value,
-                        checked: cb.checked
-                    });
-
-                    updateClassButtonText();
-                });
-
-                label.appendChild(cb);
-                label.appendChild(document.createTextNode(" " + item));
-                modalContainer.appendChild(label);
-            });
-
-        }
+        items.forEach((item, i) => {
+            const label = document.createElement("label");
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.value = item;
+            cb.id = "modal_" + i;
+            cb.addEventListener("change", updateClassButtonText);
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(" " + item));
+            modalContainer.appendChild(label);
+        });
+    }
 
         async function handleClassButtonClick() {
 
