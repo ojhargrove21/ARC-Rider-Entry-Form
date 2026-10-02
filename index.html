@@ -144,7 +144,7 @@
     <h1 role="main">Entry Form</h1>
 
     <label for="number">Rider Number:</label>
-    <input id="number" list="riderNumbers" placeholder="Select or type Rider Number" onchange="loadRider()">
+    <input inputmode="numeric" pattern="[1-9][0-9]" id="number" list="riderNumbers" placeholder="Select or type Rider Number" oninput="this.value = this.value.replace(/\D/g'').replace(/^0+/,'')" onchange="this.value = this.value.replace(/\D/g'').replace(/^0+/,''); loadRider()">
     <datalist id="riderNumbers"></datalist>
 
     <label for="firstName">First Name:</label>
